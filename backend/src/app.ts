@@ -30,13 +30,26 @@ app.use(
   })
 );
 
-// Strict CORS
+// Strict CORS configuration
+const allowedOrigins = [
+  env.CORS_ORIGIN?.replace(/\/$/, ''),
+  'https://nextrade1.vercel.app',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+].filter(Boolean) as string[];
+
 app.use(
   cors({
-    origin:
-      env.NODE_ENV === 'production'
-        ? [env.CORS_ORIGIN]
-        : [env.CORS_ORIGIN, 'http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: (requestOrigin, callback) => {
+      if (!requestOrigin) return callback(null, true);
+      if (
+        allowedOrigins.includes(requestOrigin) ||
+        requestOrigin.endsWith('.vercel.app')
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${requestOrigin}`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],

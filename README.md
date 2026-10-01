@@ -12,7 +12,9 @@ Production-grade open-source B2B e-commerce platform
 for hardware and industrial product distribution.
 
 ## 🚀 Live Demo
-**URL:** Coming soon
+- **Web App:** [https://nextrade1.vercel.app](https://nextrade1.vercel.app)
+- **API Base:** [https://nextrade-u401.onrender.com/api](https://nextrade-u401.onrender.com/api)
+- **Health Check:** [https://nextrade-u401.onrender.com/health](https://nextrade-u401.onrender.com/health)
 
 | Role | Email | Password |
 |------|-------|----------|
