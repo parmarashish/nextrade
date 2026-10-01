@@ -19,8 +19,12 @@ import { invoiceRoutes } from './modules/invoices/invoices.routes.js';
 import { reportRoutes } from './modules/reports/reports.routes.js';
 import { settingRoutes } from './modules/settings/settings.routes.js';
 import { notificationRoutes } from './modules/notifications/notifications.routes.js';
+import { systemRoutes } from './modules/system/system.routes.js';
 
 const app = express();
+
+// Trust reverse proxy (e.g. Render / Cloudflare) so rate limiting identifies client IP accurately
+app.set('trust proxy', 1);
 
 // Security Headers with Helmet
 app.use(
@@ -42,17 +46,16 @@ app.use(
   cors({
     origin: (requestOrigin, callback) => {
       if (!requestOrigin) return callback(null, true);
-      if (
-        allowedOrigins.includes(requestOrigin) ||
-        requestOrigin.endsWith('.vercel.app')
-      ) {
+      // Whitelist exact origins or Nextrade Vercel preview/production deployments
+      const isNextradeVercel = /^https:\/\/nextrade[a-z0-9-]*\.vercel\.app$/i.test(requestOrigin);
+      if (allowedOrigins.includes(requestOrigin) || isNextradeVercel) {
         return callback(null, true);
       }
       return callback(new Error(`CORS blocked for origin: ${requestOrigin}`));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-cron-secret'],
   })
 );
 
@@ -88,6 +91,7 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/system', systemRoutes);
 
 // Global 404 Handler
 app.use('*', (req, res) => {

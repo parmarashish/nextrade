@@ -4,7 +4,14 @@
  */
 function escapeCsvCell(val: any): string {
   if (val === null || val === undefined) return '';
-  const str = String(val);
+  let str = String(val);
+
+  // OWASP CSV / Formula Injection Neutralization:
+  // If string starts with =, +, -, @, \t, or \r, prefix with single-quote to force text interpretation
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+
   if (/[",\r\n]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }

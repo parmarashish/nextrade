@@ -14,6 +14,7 @@ import {
   variantParamSchema,
 } from './products.dto.js';
 import { asyncHandler } from '../../common/async-handler.js';
+import { demoGuard } from '../../middleware/demo.guard.js';
 
 const router = Router();
 
@@ -53,6 +54,7 @@ router.delete(
   '/:id',
   authenticate,
   requireRole([UserRole.ADMIN]),
+  demoGuard,
   validate(productIdParamSchema),
   asyncHandler(productsController.delete)
 );
@@ -78,6 +80,7 @@ router.delete(
   '/:id/variants/:variantId',
   authenticate,
   requireRole([UserRole.ADMIN]),
+  demoGuard,
   validate(variantParamSchema),
   asyncHandler(productsController.deleteVariant)
 );

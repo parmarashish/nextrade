@@ -6,6 +6,7 @@ import { UserRole } from '@prisma/client';
 import { validate } from '../../middleware/validate.middleware.js';
 import { settingKeyParamSchema } from './settings.dto.js';
 import { asyncHandler } from '../../common/async-handler.js';
+import { demoGuard } from '../../middleware/demo.guard.js';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.get('/public', authenticate, asyncHandler(settingsController.getPublic));
 router.use(authenticate, requireRole([UserRole.ADMIN]));
 
 // Initialize default settings if not already seeded
-router.post('/initialize', asyncHandler(settingsController.initialize));
+router.post('/initialize', demoGuard, asyncHandler(settingsController.initialize));
 
 // Get all settings as grouped object
 router.get('/', asyncHandler(settingsController.getAll));
@@ -32,6 +33,7 @@ router.get(
 // Update specific setting (upsert)
 router.put(
   '/:key',
+  demoGuard,
   validate(settingKeyParamSchema),
   asyncHandler(settingsController.updateSetting)
 );

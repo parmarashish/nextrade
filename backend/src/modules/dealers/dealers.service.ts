@@ -12,6 +12,7 @@ import {
 } from './dealers.dto.js';
 import { AuthUserPayload, RequestContext } from '../../common/types.js';
 import { OrderStatus, PaymentStatus, UserRole, UserStatus } from '@prisma/client';
+import { env } from '../../config/env.js';
 
 export class DealersService {
   // ─── List Dealers (with Status Counts) ───────────────────────
@@ -364,6 +365,10 @@ export class DealersService {
 
     if (!dealer) {
       throw AppError.notFound('Dealer not found');
+    }
+
+    if (env.DEMO_MODE && ['apex@nextrade.com', 'buildmart@nextrade.com', 'profix@nextrade.com'].includes(dealer.email)) {
+      throw AppError.forbidden('Core demo dealer accounts cannot be deactivated in Demo Mode.');
     }
 
     const updated = await prisma.user.update({

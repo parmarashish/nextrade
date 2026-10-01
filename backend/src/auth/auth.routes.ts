@@ -13,6 +13,8 @@ import { requireRole } from '../middleware/role.guard.js';
 import { UserRole } from '@prisma/client';
 import { asyncHandler } from '../common/async-handler.js';
 
+import { demoGuard } from '../middleware/demo.guard.js';
+
 const router = Router();
 
 // Public routes (rate limited)
@@ -39,10 +41,11 @@ router.post(
 // Authenticated routes
 router.get('/me', authenticate, asyncHandler(authController.me));
 router.post('/logout', authenticate, asyncHandler(authController.logout));
-router.post('/logout-all', authenticate, asyncHandler(authController.logoutAll));
+router.post('/logout-all', authenticate, demoGuard, asyncHandler(authController.logoutAll));
 router.post(
   '/change-password',
   authenticate,
+  demoGuard,
   validate(changePasswordSchema),
   asyncHandler(authController.changePassword)
 );

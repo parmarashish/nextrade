@@ -12,6 +12,10 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_DAYS: z.coerce.number().default(7),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
+  DEMO_MODE: z
+    .preprocess((val) => val === 'true' || val === true || val === '1', z.boolean())
+    .default(false),
+  CRON_SECRET: z.string().optional(),
 });
 
 const parseEnv = () => {

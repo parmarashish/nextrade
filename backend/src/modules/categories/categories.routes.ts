@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth.middleware.js';
 import { requireRole } from '../../middleware/role.guard.js';
 import { UserRole } from '@prisma/client';
 import { validate } from '../../middleware/validate.middleware.js';
+import { demoGuard } from '../../middleware/demo.guard.js';
 import {
   categoryQuerySchema,
   createCategorySchema,
@@ -48,6 +49,7 @@ router.delete(
   '/:id',
   authenticate,
   requireRole([UserRole.ADMIN]),
+  demoGuard,
   asyncHandler(categoriesController.delete)
 );
 
