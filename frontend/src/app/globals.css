@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #0176D3;
+  --primary-dark: #014486;
+  --primary-light: #D4E7F9;
+  --sidebar-bg: #032D60;
+  --sidebar-text: #B0C4DE;
+  --sidebar-active-bg: #0176D3;
+  --sidebar-active-text: #FFFFFF;
+  --content-bg: #F3F3F3;
+  --card-bg: #FFFFFF;
+  --border: #DDDBDA;
+  --text-primary: #181818;
+  --text-secondary: #444444;
+  --text-muted: #706E6B;
+  --success: #2E844A;
+  --warning: #DD7A01;
+  --danger: #BA0517;
+  --badge-bg: #EAF5FE;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--content-bg);
+    color: var(--text-primary);
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  /* Cards */
+  .nxt-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Form Inputs (36px height, 4px radius) */
+  .nxt-input {
+    height: 36px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background-color: #FFFFFF;
+    padding: 0 12px;
+    font-size: 14px;
+    color: var(--text-primary);
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  }
+  .nxt-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
+  }
+
+  /* Buttons */
+  .nxt-btn-primary {
+    background-color: var(--primary);
+    color: #FFFFFF;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 16px;
+    transition: background-color 0.15s ease;
+  }
+  .nxt-btn-primary:hover {
+    background-color: var(--primary-dark);
+  }
+
+  /* Status Badges: rounded-full pill style */
+  .nxt-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.25;
+  }
+
+  /* Tables: white background, subtle hover */
+  .nxt-table {
+    width: 100%;
+    background-color: #FFFFFF;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .nxt-table th {
+    background-color: #F8FAFC;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+  .nxt-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+  .nxt-table tbody tr:hover {
+    background-color: #F8FAFC;
+  }
+}
+
+/* Custom Sidebar Scrollbar */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}

@@ -1,0 +1,521 @@
+// NexTrade Prisma Schema
+// Single-tenant, high-performance B2B E-Commerce Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  ADMIN
+  DEALER
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  INACTIVE
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  PARTIALLY_DISPATCHED
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  REJECTED
+}
+
+enum DispatchStatus {
+  PENDING
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  RESERVED
+  RELEASED
+}
+
+// ============================================
+// AUTH & USERS
+// ============================================
+
+model User {
+  id       String     @id @default(uuid())
+  email    String     @unique
+  password String
+  name     String
+  phone    String?
+  avatar   String?
+  role     UserRole   @default(DEALER)
+  status   UserStatus @default(PENDING)
+
+  // Dealer-specific fields (for DEALER role)
+  businessName              String?
+  businessAddress           String?
+  gstNumber                 String?
+  creditLimit               Decimal?  @db.Decimal(12, 2)
+  creditDays                Int?      @default(30)
+  remainingCreditLimit      Decimal?  @db.Decimal(12, 2)
+  paymentReminderDaysBefore Int       @default(7)
+  rejectionReason           String?
+  assignedWarehouseId       String?
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  assignedWarehouse   Warehouse?               @relation("WarehouseDealers", fields: [assignedWarehouseId], references: [id])
+  sessions            Session[]
+  orders              Order[]                  @relation("DealerOrders")
+  payments            Payment[]                @relation("DealerPayments")
+  categoryDiscounts   DealerCategoryDiscount[]
+  cartItems           CartItem[]
+  activityLogs        ActivityLog[]
+  notifications       Notification[]
+  performedMovements  StockMovement[]          @relation("PerformedByUser")
+
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model Session {
+  id               String   @id @default(uuid())
+  userId           String
+  refreshTokenHash String   // SHA-256 hash of refresh token
+  deviceName       String?
+  userAgent        String?
+  ipAddress        String?
+  impersonatedBy   String?  // Admin User ID when an admin impersonates a dealer
+  lastActiveAt     DateTime @default(now())
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+  @@map("sessions")
+}
+
+// ============================================
+// CATALOG (CATEGORIES, BRANDS, PRODUCTS)
+// ============================================
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  image       String?
+  parentId    String?
+  level       Int      @default(1) // 1 = Root, 2 = Subcategory, 3 = Child Category
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Self-referencing 3-level tree
+  parent          Category?                @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children        Category[]               @relation("CategoryHierarchy")
+  products        Product[]
+  dealerDiscounts DealerCategoryDiscount[]
+
+  @@index([parentId])
+  @@index([level])
+  @@index([slug])
+  @@map("categories")
+}
+
+model Brand {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  logo        String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+
+  @@index([slug])
+  @@map("brands")
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  sku         String   @unique
+  categoryId  String
+  brandId     String?
+  images      Json     @default("[]") // Array of image URLs
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brand    Brand?           @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  variants ProductVariant[]
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([sku])
+  @@map("products")
+}
+
+model ProductVariant {
+  id              String   @id @default(uuid())
+  productId       String
+  name            String   // e.g. "50mm / Chrome Finish"
+  sku             String   @unique
+  price           Decimal  @db.Decimal(10, 2) // Base wholesale price
+  mrp             Decimal? @db.Decimal(10, 2)
+  costPrice       Decimal? @db.Decimal(10, 2)
+  gstPercentage   Decimal  @default(18.00) @db.Decimal(5, 2)
+  minimumQuantity Int      @default(1)
+  packingDetails  String?  // e.g. "Box of 20 pcs"
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  product        Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stocks         WarehouseStock[]
+  orderItems     OrderItem[]
+  dispatchItems  DispatchItem[]
+  cartItems      CartItem[]
+  stockMovements StockMovement[]
+
+  @@index([productId])
+  @@index([sku])
+  @@map("product_variants")
+}
+
+// ============================================
+// INVENTORY & WAREHOUSES
+// ============================================
+
+model Warehouse {
+  id              String   @id @default(uuid())
+  name            String
+  code            String   @unique // e.g. "WH-MUM-01"
+  address         String
+  city            String
+  state           String
+  pincode         String
+  contactPerson   String?
+  contactPhone    String?
+  isPrimary       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  invoiceSettings Json     @default("{}") // { prefix: "INV-MUM-", padding: 5, reset: "YEARLY" }
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  stocks          WarehouseStock[]
+  orders          Order[]
+  dispatches      Dispatch[]
+  dealers         User[]            @relation("WarehouseDealers")
+  invoiceSequence InvoiceSequence[]
+  stockMovements  StockMovement[]
+
+  @@index([code])
+  @@map("warehouses")
+}
+
+model WarehouseStock {
+  id               String   @id @default(uuid())
+  warehouseId      String
+  productVariantId String
+  quantity         Int      @default(0) // Physical available stock
+  reservedQuantity Int      @default(0) // Stock reserved by open confirmed orders
+  reorderPoint     Int      @default(10)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  warehouse      Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, productVariantId])
+  @@index([warehouseId])
+  @@index([productVariantId])
+  @@map("warehouse_stocks")
+}
+
+model StockMovement {
+  id               String            @id @default(uuid())
+  warehouseId      String
+  productVariantId String
+  quantity         Int
+  type             StockMovementType
+  referenceType    String?           // ORDER, DISPATCH, ADJUSTMENT, MANUAL
+  referenceId      String?
+  notes            String?
+  performedById    String?
+  createdAt        DateTime          @default(now())
+
+  warehouse      Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  performedBy    User?          @relation("PerformedByUser", fields: [performedById], references: [id], onDelete: SetNull)
+
+  @@index([warehouseId])
+  @@index([productVariantId])
+  @@index([type])
+  @@map("stock_movements")
+}
+
+// ============================================
+// DEALER DISCOUNTS & CART
+// ============================================
+
+model DealerCategoryDiscount {
+  id                 String   @id @default(uuid())
+  dealerId           String
+  categoryId         String
+  discountPercentage Decimal  @db.Decimal(5, 2)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  dealer   User     @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([dealerId, categoryId])
+  @@index([dealerId])
+  @@index([categoryId])
+  @@map("dealer_category_discounts")
+}
+
+model CartItem {
+  id               String   @id @default(uuid())
+  userId           String
+  productVariantId String
+  quantity         Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productVariantId])
+  @@index([userId])
+  @@map("cart_items")
+}
+
+// ============================================
+// ORDERS & FULFILLMENT
+// ============================================
+
+model Order {
+  id                 String        @id @default(uuid())
+  orderNumber        String        @unique // e.g. ORD-260918-0001
+  dealerId           String
+  warehouseId        String
+  status             OrderStatus   @default(PENDING)
+  subtotal           Decimal       @db.Decimal(12, 2) // Net taxable sum
+  discount           Decimal       @default(0) @db.Decimal(12, 2) // Total dealer discount
+  totalGST           Decimal       @db.Decimal(12, 2) // Sum of GST across items
+  grandTotal         Decimal       @db.Decimal(12, 2) // Subtotal + totalGST
+  paymentStatus      PaymentStatus @default(PENDING)
+  shippingAddress    Json          // { name, phone, address, city, state, pincode }
+  notes              String?
+  invoiceNumber      String?       @unique // Frozen formatted sequential invoice number
+  creditDaysForOrder Int?          @default(30)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  dealer     User         @relation("DealerOrders", fields: [dealerId], references: [id], onDelete: Restrict)
+  warehouse  Warehouse    @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  items      OrderItem[]
+  dispatches Dispatch[]
+  payments   Payment[]
+
+  @@index([dealerId])
+  @@index([warehouseId])
+  @@index([status])
+  @@index([orderNumber])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                String   @id @default(uuid())
+  orderId           String
+  productVariantId  String
+  quantity          Int
+  unitPrice         Decimal  @db.Decimal(10, 2) // Unit price AFTER dealer category discount
+  originalUnitPrice Decimal  @db.Decimal(10, 2) // Base wholesale unit price
+  dealerDiscount    Decimal  @default(0) @db.Decimal(5, 2) // Discount % applied
+  gstPercentage     Decimal  @db.Decimal(5, 2)
+  gstAmount         Decimal  @db.Decimal(10, 2) // Paisa-exact GST for line
+  total             Decimal  @db.Decimal(12, 2) // Taxable line total (unitPrice * quantity)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  dispatchItems  DispatchItem[]
+
+  @@index([orderId])
+  @@index([productVariantId])
+  @@map("order_items")
+}
+
+model Dispatch {
+  id             String         @id @default(uuid())
+  dispatchNumber String         @unique // e.g. DSP-260918-0001
+  orderId        String
+  warehouseId    String
+  status         DispatchStatus @default(PENDING)
+  trackingNumber String?
+  courierName    String?
+  dispatchedAt   DateTime?
+  deliveredAt    DateTime?
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  items     DispatchItem[]
+
+  @@index([orderId])
+  @@index([warehouseId])
+  @@index([status])
+  @@map("dispatches")
+}
+
+model DispatchItem {
+  id               String   @id @default(uuid())
+  dispatchId       String
+  orderItemId      String
+  productVariantId String
+  quantity         Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  dispatch       Dispatch       @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  orderItem      OrderItem      @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+
+  @@index([dispatchId])
+  @@index([orderItemId])
+  @@map("dispatch_items")
+}
+
+// ============================================
+// PAYMENTS & INVOICE NUMBERING
+// ============================================
+
+model Payment {
+  id            String    @id @default(uuid())
+  orderId       String?
+  dealerId      String
+  amount        Decimal   @db.Decimal(12, 2)
+  paymentMethod String?   // BANK_TRANSFER, CHEQUE, UPI, CASH
+  referenceId   String?   // UTR or Cheque Number
+  screenshotUrl String?   // Proof of payment receipt
+  paymentSource String        @default("DEALER") // DEALER, ADMIN
+  status        PaymentStatus @default(PENDING)
+  verifiedAt    DateTime?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  order  Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  dealer User   @relation("DealerPayments", fields: [dealerId], references: [id], onDelete: Restrict)
+
+  @@index([dealerId])
+  @@index([orderId])
+  @@index([status])
+  @@map("payments")
+}
+
+model InvoiceSequence {
+  id          String   @id @default(uuid())
+  warehouseId String
+  periodKey   String   // "FY2026", "2026-09", or "ALL"
+  lastNumber  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, periodKey])
+  @@index([warehouseId])
+  @@map("invoice_sequences")
+}
+
+// ============================================
+// AUDIT LOGS, NOTIFICATIONS & SETTINGS
+// ============================================
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String   // e.g. "CREATE", "UPDATE", "DELETE", "APPROVE", "DISPATCH"
+  entityType String   // e.g. "ORDER", "PRODUCT", "DEALER", "DISPATCH"
+  entityId   String?
+  details    Json?    // Snapshot of change or metadata
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([action])
+  @@map("activity_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, SUCCESS, WARNING, ORDER, PAYMENT
+  isRead    Boolean  @default(false)
+  data      Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_settings")
+}
